@@ -1,16 +1,15 @@
 import os
 import sys
+import pandas as pd
+
 
 def read_list_of_prots(file_path):
     """
     Reads list_of_prots.txt and returns a dictionary mapping (pdb_id, chain_id) to uniprot_id
     and a set of unique (pdb_id, chain_id) tuples.
-    
-    Returns:
-        tuple: (dict of PDB mappings, set of unique (pdb_id, chain_id) pairs)
     """
     pdb_chain_to_uniprot = {}
-    unique_pdb_chains = set()  # Store (pdb_id, chain_id) pairs
+    unique_pdb_chains = set()
     try:
         with open(file_path, 'r') as f:
             for line in f:
@@ -118,42 +117,18 @@ def get_sequence_from_pdb(pdb_id: str, chain_id: str, pdb_dir: str) -> str:
         return ''
 
 
+
 def cleanup_concatenated_sequences(input_file, output_file):
     """
-    Clean up the concatenated sequences file by removing entries with zero-length sequences.
-    Outputs only the concatenated sequence and interaction type.
-    
-    Args:
-        input_file (str): Path to original concatenated sequences file
-        output_file (str): Path to cleaned output file
-    
-    Returns:
-        int: Number of sequences removed
+    Clean up concatenated sequences file by removing zero-length sequences.
+    Outputs only the concatenated sequence and interaction type to a .csv file.
     """
-    removed_count = 0
-    valid_sequences = []
-    
-    # Read the original file
-    with open(input_file, 'r') as f:
-        f.readline()  # Skip header
-        for line in f:
-            parts = line.strip().split('\t')
-            if len(parts) >= 10:  # Make sure we have all fields
-                total_length = int(parts[8]) if parts[8].isdigit() else 0
-                if total_length > 0:
-                    sequence = parts[7]  # Concatenated sequence
-                    interaction_type = parts[9]  # Interaction type
-                    valid_sequences.append((sequence, interaction_type))
-                else:
-                    removed_count += 1
-    
-    # Write the cleaned file with only sequence and class
-    with open(output_file, 'w') as f:
-        f.write("Sequence\tClass\n")  # New simplified header
-        for sequence, interaction_type in valid_sequences:
-            f.write(f"{sequence}\t{interaction_type}\n")
-            
+    df = pd.read_csv(input_file)
+    cleaned_df = df[df['Total_Length'] > 0]  # Keep only rows with positive sequence length
+    removed_count = len(df) - len(cleaned_df)
+    cleaned_df[['Concatenated_Sequence', 'Interaction_Type']].to_csv(output_file, index=False)
     return removed_count
+
 
 
 def main():
@@ -161,87 +136,54 @@ def main():
     list_of_prots_file = 'list_of_prots.txt'
     interactions_file = 'interactions_data.txt'
     pdb_dir = 'pdb_files'
-    output_file = 'concatenated_sequences.txt'
-    individual_sequences_file = 'individual_sequences.txt'
-    cleaned_output_file = 'concatenated_sequences_cleaned.txt'
+    output_file = 'concatenated_sequences.csv'
+    individual_sequences_file = 'individual_sequences.csv'
+    cleaned_output_file = 'concatenated_sequences_cleaned.csv'
 
-
-    # Step 1: Read list_of_prots.txt and get unique PDB-chain pairs
+    # Step 1: Read list_of_prots.txt
     print("Reading list_of_prots.txt...")
     pdb_chain_to_uniprot, unique_pdb_chains = read_list_of_prots(list_of_prots_file)
-    print(f"Found {len(unique_pdb_chains)} unique PDB-chain pairs in list_of_prots.txt")
+    print(f"Found {len(unique_pdb_chains)} unique PDB-chain pairs.")
 
     # Step 2: Read interactions_data.txt
     print("Reading interactions_data.txt...")
     interactions = read_interactions(interactions_file)
-    print(f"Found {len(interactions)} interactions")
+    print(f"Found {len(interactions)} interactions.")
 
     # Step 3: Extract sequences for each unique PDB-chain pair
-    sequences = {}  # Will store sequences keyed by (pdb_id, chain_id)
-    with open(individual_sequences_file, 'w') as seq_f:
-        seq_f.write("PDB_ID\tChain_ID\tUniprot_ID\tSequence\tLength\n")  # Header
-        
-        for pdb_id, chain_id in unique_pdb_chains:
-            uniprot_id = pdb_chain_to_uniprot[(pdb_id, chain_id)]
-            print(f"Extracting sequence for PDB ID: {pdb_id}, Chain: {chain_id}...")
-            seq = get_sequence_from_pdb(pdb_id, chain_id, pdb_dir)
-            
-            # Store sequence with (pdb_id, chain_id) as key
-            sequences[(pdb_id, chain_id)] = seq
-            
-            # Write to individual sequences file
-            seq_length = len(seq) if seq else 0
-            seq_f.write(f"{pdb_id}\t{chain_id}\t{uniprot_id}\t{seq}\t{seq_length}\n")
+    sequences = []
+    for pdb_id, chain_id in unique_pdb_chains:
+        uniprot_id = pdb_chain_to_uniprot[(pdb_id, chain_id)]
+        print(f"Extracting sequence for PDB ID: {pdb_id}, Chain: {chain_id}...")
+        seq = get_sequence_from_pdb(pdb_id, chain_id, pdb_dir)
+        sequences.append({'PDB_ID': pdb_id, 'Chain_ID': chain_id, 'Uniprot_ID': uniprot_id, 'Sequence': seq, 'Length': len(seq)})
 
-# Step 4: Concatenate sequences based on interactions
-    print(f"Concatenating sequences and writing to {output_file}...")
-    with open(output_file, 'w') as out_f:
-        # Modified header to include interaction type
-        out_f.write("Interaction_Pair\tPDB1\tChain1\tPDB2\tChain2\tPDB1_Length\tPDB2_Length\tConcatenated_Sequence\tTotal_Length\tInteraction_Type\n")
-        
-        for interaction in interactions:
-            pdb1, pdb2, interaction_type = interaction
-            
-            # Find the corresponding chain IDs from our mapping
-            pdb1_chains = [chain for (pid, chain) in sequences.keys() if pid == pdb1]
-            pdb2_chains = [chain for (pid, chain) in sequences.keys() if pid == pdb2]
-            
-            if not pdb1_chains or not pdb2_chains:
-                missing = []
-                if not pdb1_chains:
-                    missing.append(pdb1)
-                if not pdb2_chains:
-                    missing.append(pdb2)
-                print(f"Warning: PDB(s) {', '.join(missing)} from interaction not found in list_of_prots.txt", file=sys.stderr)
-                continue
+    # Save individual sequences to CSV
+    pd.DataFrame(sequences).to_csv(individual_sequences_file, index=False)
+    print(f"Saved individual sequences to {individual_sequences_file}.")
 
-            # Use the first chain found for each PDB
-            chain1 = pdb1_chains[0]
-            chain2 = pdb2_chains[0]
-            
-            seq1 = sequences.get((pdb1, chain1), '')
-            seq2 = sequences.get((pdb2, chain2), '')
-            len1 = len(seq1)
-            len2 = len(seq2)
-            
-            if seq1 and seq2:
-                concatenated_seq = seq1 + " " + seq2
-                total_length = len1 + len2
-                out_f.write(f"{pdb1}_{pdb2}\t{pdb1}\t{chain1}\t{pdb2}\t{chain2}\t{len1}\t{len2}\t{concatenated_seq}\t{total_length}\t{interaction_type}\n")
-            else:
-                print(f"Warning: Missing sequence for pair {pdb1}_{pdb2}.", file=sys.stderr)
-                out_f.write(f"{pdb1}_{pdb2}\t{pdb1}\t{chain1}\t{pdb2}\t{chain2}\t{len1}\t{len2}\t\t0\t{interaction_type}\n")
+    # Step 4: Concatenate sequences based on interactions
+    concatenated_sequences = []
+    for pdb1, pdb2, interaction_type in interactions:
+        seq1 = next((s['Sequence'] for s in sequences if s['PDB_ID'] == pdb1), '')
+        seq2 = next((s['Sequence'] for s in sequences if s['PDB_ID'] == pdb2), '')
+        concatenated_sequences.append({
+            'Interaction_Pair': f"{pdb1}_{pdb2}",
+            'PDB1': pdb1, 'PDB2': pdb2,
+            'PDB1_Length': len(seq1), 'PDB2_Length': len(seq2),
+            'Concatenated_Sequence': seq1 + seq2,
+            'Total_Length': len(seq1) + len(seq2),
+            'Interaction_Type': interaction_type
+        })
 
+    # Save concatenated sequences to CSV
+    pd.DataFrame(concatenated_sequences).to_csv(output_file, index=False)
+    print(f"Saved concatenated sequences to {output_file}.")
 
-    print(f"Processing complete. Results saved in:")
-    print(f"1. Individual sequences: {individual_sequences_file}")
-    print(f"2. Concatenated sequences: {output_file}")
-
-    print("\nCleaning up concatenated sequences...")
+    # Step 5: Clean up concatenated sequences
     removed_count = cleanup_concatenated_sequences(output_file, cleaned_output_file)
-    print(f"Removed {removed_count} sequences with length 0")
-    print(f"3. Cleaned concatenated sequences: {cleaned_output_file}")
-
+    print(f"Removed {removed_count} sequences with zero length.")
+    print(f"Saved cleaned concatenated sequences to {cleaned_output_file}.")
 
 if __name__ == '__main__':
     main()
