@@ -3,18 +3,19 @@ import os
 import pandas as pd
 import torch
 from esm.models.esm3 import ESM3
-from esm.sdk.api import ESMProtein, SamplingConfig
+from esm.sdk.api import ESM3InferenceClient, ESMProtein, GenerationConfig
+from huggingface_hub import login
 import numpy as np
 
 # Set the model parameters and device
-MODEL_NAME = "esm3-large-2024-03"  # Replace with the specific model name if available
-DEVICE = "cuda"  # Use 'cpu' if GPU is not available
-PDB_FOLDER = "pdb_files/"
-OUTPUT_FILE = "protein_embeddings.h5"
-FORGE_TOKEN = ""
+# MODEL_NAME = "esm3-large-2024-03"  # Replace with the specific model name if available
+# FORGE_TOKEN = ""
 
-# Initialize the ESM3 client with the proprietary model
-client = ESM3.from_pretrained(MODEL_NAME, device=DEVICE)
+DEVICE = "cuda"  # Use 'cpu' if GPU is not available
+
+login()
+
+model: ESM3InferenceClient = ESM3.from_pretrained("esm3-open").to(DEVICE) # or "cpu"
 
 # Directory where your .pdb files are stored and where embeddings will be saved
 PDB_FOLDER = "pdb_files/"
