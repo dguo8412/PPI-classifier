@@ -2,8 +2,8 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Define input and output file paths
-input_file = 'intact_negative.txt'
-output_file = 'intact_negative.fasta'
+input_file = 'data/negatome.txt'
+output_file = 'data/negatome_sequences.fasta'
 
 # UniProt API URL
 uniprot_url = "https://www.uniprot.org/uniprot/{}.fasta"
@@ -62,7 +62,7 @@ def process_protein_pair(pair):
     # Concatenate sequences if both are valid
     concatenated_sequence = sequence_a + "_" + sequence_b
     print(f"Completed: Pair {interactor_a}, {interactor_b}")
-    return f">Pair_{interactor_a}_{interactor_b}\n{concatenated_sequence}\n"
+    return f">{interactor_a}_{interactor_b}\n{concatenated_sequence}\n"
 
 # Extract protein pairs from the negatome file
 def extract_protein_pairs(file_path):

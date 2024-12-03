@@ -4,8 +4,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Define input and output file paths
-input_file = 'intact_negative.txt'
-output_file = 'intact_negative.fasta'
+input_file = 'data/negatome.txt'
+output_file = 'data/intact_negative.fasta'
 
 # UniProt API URL
 uniprot_url = "https://www.uniprot.org/uniprot/{}.fasta"
