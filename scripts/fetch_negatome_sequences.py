@@ -1,14 +1,16 @@
+# Fetches protein sequences from UniProt according to accession IDs found in Negatome 2.0
+# Also concatenates sequences with an underscore (_) to create dataset
+
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Define input and output file paths
 input_file = 'data/negatome.txt'
 output_file = 'data/negatome_sequences.fasta'
 
 # UniProt API URL
 uniprot_url = "https://www.uniprot.org/uniprot/{}.fasta"
 
-# Failure classification categories
+# Failure categories for logging purposes
 failure_reasons = {
     "missing_sequence_a": 0,
     "missing_sequence_b": 0,
@@ -24,7 +26,7 @@ def fetch_sequence(uniprot_id):
         if response.status_code == 200:
             # Extract sequence from FASTA format
             lines = response.text.split('\n')
-            return ''.join(lines[1:])  # Skip the header line
+            return ''.join(lines[1:])
         elif response.status_code == 404:
             print(f"Missing sequence for {uniprot_id}: Status 404")
             return None
@@ -35,7 +37,7 @@ def fetch_sequence(uniprot_id):
         print(f"Network error fetching {uniprot_id}: {e}")
         return "network_error"
 
-# Function to process a protein pair and return concatenated sequences
+# Function to process protein pair and return concatenated sequences
 def process_protein_pair(pair):
     interactor_a, interactor_b = pair
     sequence_a = fetch_sequence(interactor_a)
@@ -69,23 +71,22 @@ def extract_protein_pairs(file_path):
     protein_pairs = set()  # To avoid duplicate pairs
     with open(file_path, 'r') as file:
         for line in file:
-            if line.strip():  # Skip empty lines
+            if line.strip():
                 pair = line.strip().split()
                 if len(pair) == 2:  # Ensure the line has exactly two columns
                     protein_pairs.add((pair[0], pair[1]))
     return protein_pairs
 
-# Main execution
 if __name__ == "__main__":
     protein_pairs = extract_protein_pairs(input_file)
     total_pairs = len(protein_pairs)
     print(f"Initial protein pairs count: {total_pairs}")
 
-    # Counters for successes and failures
+    # Counters for successes
     success_count = 0
 
-    # Use ThreadPoolExecutor for parallel processing
-    with ThreadPoolExecutor(max_workers=60) as executor:  # Adjust max_workers based on your CPU
+    # Parallelize for faster sequence fetching
+    with ThreadPoolExecutor(max_workers=60) as executor:
         futures = {executor.submit(process_protein_pair, pair): pair for pair in protein_pairs}
         with open(output_file, 'w') as fasta_file:
             for future in as_completed(futures):
@@ -104,8 +105,6 @@ if __name__ == "__main__":
     print(f"Total pairs: {total_pairs}")
     print(f"Successful pairs: {success_count}")
     print(f"Failed pairs: {total_pairs - success_count}")
-
-    # Print failure breakdown
     print("\nFailure Breakdown:")
     for reason, count in failure_reasons.items():
         print(f"{reason.replace('_', ' ').capitalize()}: {count}")

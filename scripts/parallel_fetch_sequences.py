@@ -1,16 +1,18 @@
+# Fetches protein sequences from UniProt according to accession IDs found in IntAct
+# Also concatenates sequences with an underscore (_) to create dataset
+
 import requests
 import csv
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Define input and output file paths
 input_file = 'data/negatome.txt'
 output_file = 'data/intact_negative.fasta'
 
 # UniProt API URL
 uniprot_url = "https://www.uniprot.org/uniprot/{}.fasta"
 
-# Failure classification categories
+# Failure categories for logging purposes
 failure_reasons = {
     "missing_sequence_a": 0,
     "missing_sequence_b": 0,
@@ -26,7 +28,7 @@ def fetch_sequence(uniprot_id):
         if response.status_code == 200:
             # Extract sequence from FASTA format
             lines = response.text.split('\n')
-            return ''.join(lines[1:])  # Skip the header line
+            return ''.join(lines[1:])
         elif response.status_code == 404:
             print(f"Missing sequence for {uniprot_id}: Status 404")
             return None
@@ -91,11 +93,11 @@ if __name__ == "__main__":
     total_pairs = len(protein_pairs)
     print(f"Initial protein pairs count: {total_pairs}")
 
-    # Counters for successes and failures
+    # Counters for successes
     success_count = 0
 
-    # Use ThreadPoolExecutor for parallel processing
-    with ThreadPoolExecutor(max_workers=60) as executor:  # Adjust max_workers based on your CPU
+    # Parallelize for faster processing
+    with ThreadPoolExecutor(max_workers=60) as executor:
         futures = {executor.submit(process_protein_pair, pair): pair for pair in protein_pairs}
         with open(output_file, 'w') as fasta_file:
             for future in as_completed(futures):
@@ -114,8 +116,6 @@ if __name__ == "__main__":
     print(f"Total pairs: {total_pairs}")
     print(f"Successful pairs: {success_count}")
     print(f"Failed pairs: {total_pairs - success_count}")
-
-    # Print failure breakdown
     print("\nFailure Breakdown:")
     for reason, count in failure_reasons.items():
         print(f"{reason.replace('_', ' ').capitalize()}: {count}")
